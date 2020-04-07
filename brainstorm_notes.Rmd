@@ -1,0 +1,21 @@
+---
+title: "Brainstorm/notes"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(httr)
+library(xml2)
+```
+
+```{r}
+josh <- "https://www.boardgamegeek.com/xmlapi2/collection?username=Sci_Karate&subtype=boardgame&own=1"
+josh_data <- GET(josh) %>%
+  read_xml()
+View(josh_data)
+```
