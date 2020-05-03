@@ -10,12 +10,71 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(tidyverse)
 library(httr)
+library(XML)
 library(xml2)
+library(lubridate)
+library(rlang)
+library(rlist)
 ```
 
+Grabbing initial list of games we own
 ```{r}
 josh <- "https://www.boardgamegeek.com/xmlapi2/collection?username=Sci_Karate&subtype=boardgame&own=1"
+
 josh_data <- GET(josh) %>%
-  read_xml()
-View(josh_data)
+  read_xml() %>%
+  as_list() %>%
+  with(.[[1]])
+
+game_id <- lapply(josh_data, attributes) %>%
+  sapply(function(x) x[["objectid"]]) 
+```
+
+
+Pulling data on the games we own using the IDs
+```{r}
+josh_games_request <- "https://www.boardgamegeek.com/xmlapi2/thing?id="
+for (id in seq_along(game_id)) {
+  josh_games_request <- paste(josh_games_request, game_id[[id]], ",", sep = "")
+}
+josh_games_request <- str_sub(josh_games_request, end = -2)
+
+josh_games <- GET(josh_games_request) %>%
+  xmlParse() %>%
+  xmlToList()
+
+games_df <- list()
+for (i in seq_along(josh_games)) {
+  vars <- unique(names(josh_games[[i]]))
+  vars <- vars[! vars %in% c("link", ".attrs", "poll")]
+  games_df[[i]] <- list()
+  for (j in seq_along(vars)) {
+    if (vars[[j]] == "name") {
+      games_df[[i]][["name"]] <- josh_games[[i]][["name"]][["value"]]
+    } else {
+      games_df[[i]][[vars[[j]]]] <- josh_games[[i]][[vars[[j]]]]
+    }
+  }
+  rownames <- names(games_df[[i]])
+  games <- unlist(games_df[[i]])
+  games_df[[i]] <- data.frame(matrix(games, nrow = length(games), byrow = T), row.names = rownames)
+  name <- as.character(games_df[[i]]["name", ])
+  games_df[[name]] <- duplicate(games_df[[i]])
+  games_df[[i]] <- NULL
+}
+
+game_names <- sapply(games_df, function(x) as.character(x["name", 1]))
+all_games <- list.cbind(games_df)
+colnames(all_games) <- colnames
+
+all_games_tidy <- all_games %>%
+  t() %>%
+  as.data.frame() %>%
+  select(3, 1:2, 4:ncol(.)) %>%
+  mutate_at(vars(5:11), as.numeric) %>%
+  mutate_at(vars(1:4), as.character)
+
+rownames(all_games_tidy) <- NULL
+
+all_games_tidy <- all_games_tidy[1:(nrow(all_games_tidy)-1), ]
 ```
