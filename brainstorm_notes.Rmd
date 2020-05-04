@@ -11,7 +11,6 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(httr)
 library(XML)
-library(xml2)
 library(lubridate)
 library(rlang)
 library(rlist)
@@ -25,10 +24,8 @@ josh_data <- GET(josh) %>%
   xmlParse() %>%
   xmlToList() 
 
-game_id <- lapply(josh_data, attributes) %>%
-  sapply(function(x) x[["objectid"]]) 
-
-# Get .attrs --> objectid for each item in list
+game_id <- lapply(josh_data[1:(length(josh_data) - 1)], function(x) as.character(x[[".attrs"]][["objectid"]])) %>%
+  unlist()
 ```
 
 
@@ -66,16 +63,14 @@ for (i in seq_along(josh_games)) {
 
 game_names <- sapply(games_df, function(x) as.character(x["name", 1]))
 all_games <- list.cbind(games_df)
-colnames(all_games) <- colnames
+colnames(all_games) <- game_names
 
-all_games_tidy <- all_games %>%
+all_games_tidy <- all_games[1:(ncol(all_games) - 1)] %>%
   t() %>%
   as.data.frame() %>%
   select(3, 1:2, 4:ncol(.)) %>%
-  mutate_at(vars(5:11), as.numeric) %>%
-  mutate_at(vars(1:4), as.character)
+  mutate_at(vars(1:11), as.character) %>%
+  mutate_at(vars(5:11), as.numeric)
 
 rownames(all_games_tidy) <- NULL
-
-all_games_tidy <- all_games_tidy[1:(nrow(all_games_tidy)-1), ]
 ```
