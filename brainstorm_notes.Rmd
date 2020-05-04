@@ -22,12 +22,13 @@ Grabbing initial list of games we own
 josh <- "https://www.boardgamegeek.com/xmlapi2/collection?username=Sci_Karate&subtype=boardgame&own=1"
 
 josh_data <- GET(josh) %>%
-  read_xml() %>%
-  as_list() %>%
-  with(.[[1]])
+  xmlParse() %>%
+  xmlToList() 
 
 game_id <- lapply(josh_data, attributes) %>%
   sapply(function(x) x[["objectid"]]) 
+
+# Get .attrs --> objectid for each item in list
 ```
 
 
