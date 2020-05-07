@@ -16,41 +16,53 @@ library(rlang)
 library(rlist)
 ```
 
-Grabbing initial list of games we own
+
+Setting the user data to grab
 ```{r}
-josh <- "https://www.boardgamegeek.com/xmlapi2/collection?username=Sci_Karate&subtype=boardgame&own=1"
+user <- "Sci_Karate"
+```
 
-josh_data <- GET(josh) %>%
+Grabbing initial list of games
+```{r}
+user_request <- paste("https://www.boardgamegeek.com/xmlapi2/collection?username=", user, "&subtype=boardgame&own=1", sep = "")
+
+user_data <- GET(user_request) %>%
   xmlParse() %>%
-  xmlToList() 
+  xmlToList()
 
-game_id <- lapply(josh_data[1:(length(josh_data) - 1)], function(x) as.character(x[[".attrs"]][["objectid"]])) %>%
+game_id <- lapply(user_data[1:(length(user_data) - 1)], function(x) as.character(x[[".attrs"]][["objectid"]])) %>%
   unlist()
 ```
 
 
-Pulling data on the games we own using the IDs
+Pulling data on games using the IDs
 ```{r}
-josh_games_request <- "https://www.boardgamegeek.com/xmlapi2/thing?id="
+user_games_request <- "https://www.boardgamegeek.com/xmlapi2/thing?id="
 for (id in seq_along(game_id)) {
-  josh_games_request <- paste(josh_games_request, game_id[[id]], ",", sep = "")
+  user_games_request <- paste(user_games_request, game_id[[id]], ",", sep = "")
 }
-josh_games_request <- str_sub(josh_games_request, end = -2)
+user_games_request <- str_sub(user_games_request, end = -2)
+user_games_request <- paste(user_games_request, "&stats=1&comments=1&ratingcomments=1", sep = "")
 
-josh_games <- GET(josh_games_request) %>%
+user_games <- GET(user_games_request) %>%
   xmlParse() %>%
   xmlToList()
 
 games_df <- list()
-for (i in seq_along(josh_games)) {
-  vars <- unique(names(josh_games[[i]]))
-  vars <- vars[! vars %in% c("link", ".attrs", "poll")]
+for (i in seq_along(user_games)) {
+  vars <- unique(names(user_games[[i]]))
+  vars <- vars[! vars %in% c("link", ".attrs", "poll", "comments")]
   games_df[[i]] <- list()
   for (j in seq_along(vars)) {
     if (vars[[j]] == "name") {
-      games_df[[i]][["name"]] <- josh_games[[i]][["name"]][["value"]]
+      games_df[[i]][["name"]] <- user_games[[i]][["name"]][["value"]]
+    } else if (vars[[j]] == "statistics") {
+      use <- c("usersrated", "average", "bayesaverage", "stddev", "owned", "trading", "wanting", "wishing", "numcomments", "numweights", "averageweight")
+      for (stat in use) {
+        games_df[[i]][[stat]] <- user_games[[i]][["statistics"]][["ratings"]][[stat]]
+      }
     } else {
-      games_df[[i]][[vars[[j]]]] <- josh_games[[i]][[vars[[j]]]]
+      games_df[[i]][[vars[[j]]]] <- user_games[[i]][[vars[[j]]]]
     }
   }
   rownames <- names(games_df[[i]])
@@ -59,6 +71,25 @@ for (i in seq_along(josh_games)) {
   name <- as.character(games_df[[i]]["name", ])
   games_df[[name]] <- duplicate(games_df[[i]])
   games_df[[i]] <- NULL
+}
+
+games_comments <- tibble(game = c(NA), 
+                         rating = c(NA), 
+                         comment = c(NA))
+curr_row <- 0
+for (i in seq_along(user_games)) {
+  if (class(user_games[[i]]) != "character") {
+    for (j in seq_along(user_games[[i]][["comments"]])) {
+      curr_row <- max(curr_row+1, i+(j-1))
+      if (length(user_games[[i]][["comments"]][[j]]) > 2) {
+        games_comments[curr_row, "game"] <- user_games[[i]][["name"]][["value"]]
+        if (user_games[[i]][["comments"]][[j]][["rating"]] != "N/A") {
+          games_comments[curr_row, "rating"] <- user_games[[i]][["comments"]][[j]][["rating"]]
+        }
+        games_comments[curr_row, "comment"] <- user_games[[i]][["comments"]][[j]][["value"]]
+      }
+    }
+  }
 }
 
 game_names <- sapply(games_df, function(x) as.character(x["name", 1]))
