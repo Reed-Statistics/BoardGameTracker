@@ -3,20 +3,30 @@ library(shiny)
 library(shinyWidgets)
 library(tidyverse)
 library(htmltools)
+library(httr)
 library(viridis)
 library(wordcloud)
 library(tidytext)
 library(kableExtra)
 library(shinycssloaders)
+library(XML)
+library(rlang)
+library(rlist)
+library(extrafont)
+library(showtext)
+library(grDevices)
 
-options(spinner.color = "white", spinner.type = 4) 
+#font_add_google("Quicksand")
+#loadfonts()
+
+options(spinner.color = "white", spinner.type = 1) 
 
 # User interface
 ui <- fluidPage(
     tags$head(
         tags$style(HTML(paste("@import url('//fonts.googleapis.com/css?family=Passion+One:400');",
-                              "@import url('//fonts.googleapis.com/css?family=Quicksand:300');", sep = "")))),
-    #                a {color: #c71028};"))),
+                              "@import url('//fonts.googleapis.com/css?family=Quicksand:300');",
+                              "label{font-family: Quicksand;}", sep = "")))),
     setBackgroundColor("#3f3a60"),
     titlePanel(h1("What's in a Board Game Geek Collection?", 
                    style = "color: white; font-family: 'Passion One'; font-size: 56px; padding: 10px;")),
@@ -29,7 +39,7 @@ ui <- fluidPage(
             h6(" "),
             textInput("username", "Enter username here (case-sensitive): ",
                       value = ""),
-            tags$i(h6("(Ex: try 'Sci_Karate'!)")),
+            tags$i(h6("(Ex: try 'Sci_Karate'!)", style = "font-family: 'Quicksand'; font-weight: bold")),
             htmlOutput("loading"),
             width = 3
         ),
@@ -37,14 +47,16 @@ ui <- fluidPage(
             div(h2(paste("Enter a username on the left as it's displayed in BGG, ",
                          "and learn more about that user's board game collection.", sep = "")),
                 style = "color: white; padding: 10px; font-family: 'Quicksand'"),
-            htmlOutput("gamesList", 
-                       style = paste("color: white; font-size: 30px; font-family: ",
-                                     "'Helvetica Neue', Helvetica, sans-serif; padding: 15px; ", sep = "")),
+            htmlOutput("gamesList"),
             uiOutput("imageGrid") %>%
                 withSpinner(),
             uiOutput("stats") %>%
                 withSpinner(color = "#3f3a60"),
-            plotOutput("wordcloud") %>%
+            plotOutput("weightScore") %>%
+                withSpinner(color = "#3f3a60"),
+            #plotOutput("wordcloud") %>%
+            #    withSpinner(color = "#3f3a60"),
+            uiOutput("wordCloudTitle") %>%
                 withSpinner(color = "#3f3a60"),
             plotOutput("commentWordcloud") %>%
                 withSpinner(color = "#3f3a60")
@@ -151,7 +163,7 @@ server <- function(input, output){
             games_names <- as.character(games()$name)
             #games_concat <- paste(games_names, sep = "", collapse = "<br/>")
             p("This user owns ", span(length(games_names), style = "font-weight: bold"), " games:", 
-                style = "font-family: 'Quicksand'; font-size: 24px") #<br/>", games_concat))
+                style = "font-family: 'Quicksand'; font-size: 24px; padding: 15px; color: white") #<br/>", games_concat))
         }
     })
     output$imageGrid <- renderUI({
@@ -159,7 +171,7 @@ server <- function(input, output){
             thumbnails <- as.character(games()$thumbnail)
             fluidRow(
                 lapply(thumbnails, function(x) {
-                    column(2, img(src = x, height = "70", 
+                    column(2, img(src = x, height = "80", 
                                   style = "display: block; margin-left: auto; margin-right: auto;"))
                 })
             )
@@ -172,8 +184,8 @@ server <- function(input, output){
                           avgWeight = mean(as.numeric(as.character(averageweight)), na.rm = TRUE))
             avgRating <- round(summ$avgRating[[1]], digits = 2)
             avgWeight <- round(summ$avgWeight[[1]], digits = 2)
-            div(HTML(paste("<br/>Average rating: <b>", avgRating, "</b><br/>",
-                           "Average weight score: <b>", avgWeight, "</b><br/><br/>", sep = "")),
+            div(HTML(paste("<br/>Average rating: <b>", avgRating, "</b> / 10<br/>",
+                           "Average difficulty score: <b>", avgWeight, "</b> / 5 <br/><br/>", sep = "")),
                 style = "color: white; font-family: 'Quicksand'; font-size: 24px")
         }
     })
@@ -210,6 +222,7 @@ server <- function(input, output){
                                   "ð", "ñ", "à")
             # "card", "cards", "deck", "decks", "board",
             palette <- viridis(10, direction = -1)
+            pal2 <- colorRampPalette(c("#3f3a60", "#fe5100"))
             game_desc_words <- comments() %>%
                 unnest_tokens(output = word, input = comment,
                               token = "words")
@@ -221,9 +234,21 @@ server <- function(input, output){
                 arrange(desc(n)) %>%
                 top_n(20)
             game_desc %>%
-                with(wordcloud(word, n, colors = palette,
+                with(wordcloud(word, n, colors = pal2(10),
                                random.order = FALSE,
                                scale = c(8, 1)))
+        }
+    })
+    output$weightScore <- renderPlot({
+        if (input$username != "" & games_list() != "Invalid") {
+            ggplot(games(), aes(x = as.numeric(as.character(averageweight)), 
+                                y = as.numeric(as.character(average)))) +
+                geom_point(size = 4, color = "#fe5100", shape = 15) +
+                geom_smooth(method = "lm", color = "#3f3a60") +
+                labs(x = "Difficulty (1-5)", y = "Score (1-10)", title = "Game scores by difficulty") +
+                theme(axis.title = element_text(size = 20, family = "Quicksand"),
+                      axis.text = element_text(family = "Quicksand"),
+                      title = element_text(size = 24, family = "Quicksand"))
         }
     })
     output$loading <- renderUI({
@@ -231,6 +256,12 @@ server <- function(input, output){
             if (!(is.null(user_games()$error))) {
                 tags$i(h5("Not a valid username", style = "color: red"))
             }
+        }
+    })
+    output$wordCloudTitle <- renderUI({
+        if (input$username != "" & games_list() != "Invalid") {
+            div(HTML("<br/>Word cloud of reviews for all games<br/><br/>"), 
+                style = "font-size: 24px; color: white; font-family: 'Quicksand'")
         }
     })
 }
