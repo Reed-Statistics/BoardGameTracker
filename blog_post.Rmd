@@ -1,5 +1,5 @@
 ---
-title: "Blog Post"
+title: "How to Look at a Board Game Collection Like a Data Scientist"
 author: "Maddy Doak, Josh Reiss"
 date: "5/7/2020"
 output: html_document
@@ -8,3 +8,31 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
+```{r}
+library(ngram)
+```
+
+```{r, eval = FALSE}
+wordcount("
+```
+
+At the start of this project, my partner and I wanted to dive into something we've investigated at a high-level for over a year now: board game ratings and statistics. We've both become deeply invested in board games as a hobby, and realized within a few months of research that one of the best resources for learning about board games is the [Board Game Geek (BGG)](https://boardgamegeek.com/) website.
+
+This led to a data science project centered on data pulled from BGG's website using the [BGG XML API2](https://boardgamegeek.com/wiki/page/BGG_XML_API2), a revised version of the original API. This API allows a given user to pull information about board game collections for a single user, individual board games, or even many different games at once. This does not require an API key like many APIs do; instead, they limit requests from any user to every 5 seconds. If you try to make requests any faster than that, you just get an error.
+
+It was ultimately decided that the best way to learn about a set of board games, without simply picking the top 'n' examples, would be to take a single user's collection. But what if you wanted to learn more about your own collection of board games, not just the collection owned by the person who did the data analysis? Thus, we decided that instead of simply doing all the wrangling on our own board game collection, we would make an application that would allow anyone to examine any public BGG user's collection of board games in greater detail.
+
+Thus, a [Shiny](https://shiny.rstudio.com/) app was born. This app allows anyone to enter a valid username from BGG, and see that user's entire collection (visualized using thumbnails), as well as summary statistics about their collection (in this case, we provided a calculation of the average rating and difficulty of the games), as well as a word cloud of the most common words in reviews of all of the games. In addition, a graph is generated representing even further information about the games. This graph has an interesting origin story.
+
+
+
+```{r, eval = FALSE}
+")
+```
+
+
+Include data vis
+
+
+Discussion of relationship between weight and rating for games (Josh!)

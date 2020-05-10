@@ -194,7 +194,7 @@ server <- function(input, output){
             data("stop_words")
             words_to_exclude <- c("game", "player", "players", "played", "play", "playing", "score",
                                   "win", "lose", "hand", "round", "wins", "set", "choose", "takes",
-                                  "quot", "mdash", "ndash", "eacute", "rsquo", "amp")
+                                  "quot", "mdash", "ndash", "eacute", "rsquo", "amp", "de")
             # "card", "cards", "deck", "decks", "board",
             palette <- viridis(10, direction = -1)
             game_desc_words <- games() %>%
