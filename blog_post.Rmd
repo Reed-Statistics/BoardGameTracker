@@ -1,23 +1,54 @@
 ---
-title: "How to Look at a Board Game Collection Like a Data Scientist"
+title: "Looking at a Board Game Collection Like a Data Scientist"
 author: "Maddy Doak, Josh Reiss"
 date: "5/7/2020"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
+<style type="text/css">
+
+@import url('//fonts.googleapis.com/css?family=Passion+One:400');
+@import url('//fonts.googleapis.com/css?family=Quicksand:300,400,500,600,700');
+label{font-family: Quicksand;}
+
+h1.title {
+  font-size: 48px;
+  color: white;
+  font-family: 'Passion One';
+}
+h1,h2,h3,h4,h5,h6 {
+  font-family: 'Quicksand';
+  font-weight: 500;
+  color: white;
+}
+body {
+  background-color: #3f3a60;
+  font-family: 'Quicksand';
+  font-weight: 400;
+  font-size: 16px;
+  color: white
+}
+a {
+  color: #fe5100;
+}
+
+</style>
+
+
+```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r, echo = FALSE}
 library(ngram)
 ```
 
-```{r, eval = FALSE}
+```{r, eval = FALSE, echo = FALSE}
+# 490
 wordcount("
 ```
 
-At the start of this project, my partner and I wanted to dive into something we've investigated at a high-level for over a year now: board game ratings and statistics. We've both become deeply invested in board games as a hobby, and realized within a few months of research that one of the best resources for learning about board games is the [Board Game Geek (BGG)](https://boardgamegeek.com/) website.
+At the start of this project, we wanted to dive into something we've investigated at a casual level for over a year now: board games. We've both become deeply invested in board games as a hobby, and realized within a few months of research that one of the best resources for learning about board games is the [Board Game Geek (BGG)](https://boardgamegeek.com/) website.
 
 This led to a data science project centered on data pulled from BGG's website using the [BGG XML API2](https://boardgamegeek.com/wiki/page/BGG_XML_API2), a revised version of the original API. This API allows a given user to pull information about board game collections for a single user, individual board games, or even many different games at once. This does not require an API key like many APIs do; instead, they limit requests from any user to every 5 seconds. If you try to make requests any faster than that, you just get an error.
 
@@ -25,14 +56,108 @@ It was ultimately decided that the best way to learn about a set of board games,
 
 Thus, a [Shiny](https://shiny.rstudio.com/) app was born. This app allows anyone to enter a valid username from BGG, and see that user's entire collection (visualized using thumbnails), as well as summary statistics about their collection (in this case, we provided a calculation of the average rating and difficulty of the games), as well as a word cloud of the most common words in reviews of all of the games. In addition, a graph is generated representing even further information about the games. This graph has an interesting origin story.
 
+Several posts on the internet ([1](https://www.reddit.com/r/boardgames/comments/9lrp81/i_took_the_1468_most_voted_on_games_from_bgg_and/), [2](https://www.reddit.com/r/boardgames/comments/2e0lse/i_analyzed_bgg_ratings_vs_game_weight_in_python/), [3](http://dvatvani.github.io/BGG-Analysis-Part-2.html), along with likely many more) have done their own analyses of data from BGG and discovered something quite interesting: ratings are biased according to complexity. In short, the more complicated or difficult a game is, the more likely users are to rate it better than an easier game of similar quality. There are many possible factors behind this trend, but regardless of the cause it is an interesting pattern. We believe the best analysis and breakdown of this phenomenon is found in the third source listed above, on a [blog dedicated to Python and data analysis by Dinesh Vatvani](http://dvatvani.github.io/BGG-Analysis-Part-2.html).
 
+As a result of this finding, we decided to include a graph comparing weight and ranking of the board games in a user's colleciton. Lo and behold, the pattern held true, with a very significant p-value (<< 0.001) and an adjusted R-squared value of 0.405 (moderately positive): 
 
-```{r, eval = FALSE}
+```{r, eval = FALSE, echo = FALSE}
 ")
 ```
 
+```{r, echo = FALSE, message = FALSE, warning = FALSE, fig.align = "center", fig.width = 6, fig.height = 4}
+library(tidyverse)
+library(httr)
+library(XML)
+library(lubridate)
+library(rlang)
+library(rlist)
 
-Include data vis
+user <- "Sci_Karate"
 
+user_request <- paste("https://www.boardgamegeek.com/xmlapi2/collection?username=", user, "&subtype=boardgame&own=1", sep = "")
 
-Discussion of relationship between weight and rating for games (Josh!)
+user_data <- GET(user_request) %>%
+  xmlParse() %>%
+  xmlToList()
+
+game_id <- lapply(user_data[1:(length(user_data) - 1)], function(x) as.character(x[[".attrs"]][["objectid"]])) %>%
+  unlist()
+
+user_games_request <- "https://www.boardgamegeek.com/xmlapi2/thing?id="
+for (id in seq_along(game_id)) {
+  user_games_request <- paste(user_games_request, game_id[[id]], ",", sep = "")
+}
+user_games_request <- str_sub(user_games_request, end = -2)
+user_games_request <- paste(user_games_request, "&stats=1&comments=1&ratingcomments=1", sep = "")
+
+user_games <- GET(user_games_request) %>%
+  xmlParse() %>%
+  xmlToList()
+
+games_df <- list()
+for (i in seq_along(user_games)) {
+  vars <- unique(names(user_games[[i]]))
+  vars <- vars[! vars %in% c("link", ".attrs", "poll", "comments")]
+  games_df[[i]] <- list()
+  for (j in seq_along(vars)) {
+    if (vars[[j]] == "name") {
+      games_df[[i]][["name"]] <- user_games[[i]][["name"]][["value"]]
+    } else if (vars[[j]] == "statistics") {
+      use <- c("usersrated", "average", "bayesaverage", "stddev", "owned", "trading", "wanting", "wishing", "numcomments", "numweights", "averageweight")
+      for (stat in use) {
+        games_df[[i]][[stat]] <- user_games[[i]][["statistics"]][["ratings"]][[stat]]
+      }
+    } else {
+      games_df[[i]][[vars[[j]]]] <- user_games[[i]][[vars[[j]]]]
+    }
+  }
+  rownames <- names(games_df[[i]])
+  games <- unlist(games_df[[i]])
+  games_df[[i]] <- data.frame(matrix(games, nrow = length(games), byrow = T), row.names = rownames)
+  name <- as.character(games_df[[i]]["name", ])
+  games_df[[name]] <- duplicate(games_df[[i]])
+  games_df[[i]] <- NULL
+}
+
+game_names <- sapply(games_df, function(x) as.character(x["name", 1]))
+all_games <- list.cbind(games_df)
+colnames(all_games) <- game_names
+
+all_games_tidy <- all_games[1:(ncol(all_games) - 1)] %>%
+  t() %>%
+  as.data.frame() %>%
+  select(3, 1:2, 4:ncol(.)) %>%
+  mutate_at(vars(1:11), as.character) %>%
+  mutate_at(vars(5:11), as.numeric)
+
+rownames(all_games_tidy) <- NULL
+
+all_games_tidy$averageweight <- as.numeric(as.character(all_games_tidy$averageweight))
+all_games_tidy$average <- as.numeric(as.character(all_games_tidy$average))
+
+ggplot(all_games_tidy, aes(x = averageweight, 
+                           y = average)) +
+  geom_point(size = 3, color = "#fe5100", shape = 15) +
+  geom_smooth(method = "lm", color = "#3f3a60") +
+  labs(x = "Difficulty (1-5)", y = "Rating (1-10)", title = "Game ratings by difficulty") +
+  theme(axis.title = element_text(size = 14),
+        title = element_text(size = 16))
+
+#summary(lm(average ~ averageweight, all_games_tidy))
+```
+
+```{r, eval = FALSE, echo = FALSE}
+# 217
+# 707 total
+wordcount("
+```
+
+It's important to explain what those terms mean. Basically, the p-value describes the likelihood that the result we see would occur purely by chance; since the chance is far less than 1 / 1000, there is support for the idea that the pattern we see is significant, and that there is a relationship between game difficulty and rating. 
+
+The R-squared (or adjusted R-squared) value represents how strong this relationship is, on a scale from -1 to 1. If the R-squared value is -1, then there is a perfect 'negative' correlation; this does not mean that they're perfectly unrelated to each other. In fact, this means that there is a perfect relationship between the two parts: when one goes up by a certain amount, the other goes down by a certain amount, across all possible values that were measured. An R-squared of 1 says something similar: whenever one of the factors goes up, so does the other, and this relationship is perfect across all measured data. An R-squared of 0 is perfectly imperfect: there is no relationship whatsoever (that we can see) between the variables. 
+
+The R-squared for the graph above is about halfway between 0 and 1; there is a 'medium' positive correlation between game rating and difficulty, according to our data set. This means that as a game's difficulty increases, the rating tends to as well, but this relationship isn't extremely strong, or necessarily true in all cases. It's just that: a tendency.
+
+```{r, eval = FALSE, echo = FALSE}
+")
+```
